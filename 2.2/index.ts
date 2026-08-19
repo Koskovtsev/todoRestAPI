@@ -1,17 +1,18 @@
 import fetch from 'node-fetch';
 import { randomInt } from 'node:crypto';
+import { resolve } from 'node:dns';
 
 
 interface IpResponse {
     ip: string;
 }
-
+//1
 async function nodeFetchRequest(): Promise<unknown> {
     const response = await (await fetch('https://api.ipify.org?format=json')).json();
     console.log(response);
     return response;
 }
-
+//2
 async function getIp(): Promise<void> {
     const data = (await nodeFetchRequest()) as IpResponse;
     console.log(data.ip);
@@ -29,7 +30,7 @@ interface IRandomNames {
     2: string,
     3: string,
 }
-
+//3
 async function getRandomName(): Promise<DummyUser> {
     const randomId = randomInt(1, 100);
     const first = await (await fetch(`https://dummyjson.com/users/${randomId}`)).json() as DummyUser;
@@ -94,6 +95,7 @@ async function multiplyFetch() {
   `);
 }
 
+//4 b
 async function fastestFetchWoman() {
     let gender = '';
     let womanName = '';
@@ -112,7 +114,7 @@ function getGender(): Promise<DummyUser> {
     getRandomNamePromise().then(resolve).catch(reject);
     return promise;
 }
-
+//4 a
 function fastestFetchWomanPromise(): Promise<{ name: string, count: number }> {
     const { resolve, reject, promise } = Promise.withResolvers<{ name: string, count: number }>();
     let count = 0;
@@ -130,7 +132,27 @@ function fastestFetchWomanPromise(): Promise<{ name: string, count: number }> {
     attempt();
     return promise;
 }
+//test
+// multiplyFetch();
+// fastestFetchWoman();
+// fastestFetchWomanPromise();
+//5
+function f1(cb: (value: unknown) => void) {
+    fetch('https://api.ipify.org?format=json').then((response) => response.json().then(cb));
+}
 
-multiplyFetch();
-fastestFetchWoman();
-fastestFetchWomanPromise();
+async function awaitedFunction() {
+    return new Promise((resolve) => {
+        f1(resolve);
+    })
+}
+//6
+async function callBackFunction(callBack: (ip: string) => void) {
+    let ip = await awaitedFunction() as string;
+    callBack(ip);
+}
+//test
+console.log(`test f1-f2 ${JSON.stringify(await awaitedFunction())}`);
+callBackFunction((result) => {
+    console.log('Результат з коллбека:', result);
+});
