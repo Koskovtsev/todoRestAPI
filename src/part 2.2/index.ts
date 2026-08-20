@@ -1,7 +1,4 @@
-import fetch from 'node-fetch';
-import { randomInt } from 'node:crypto';
-import { resolve } from 'node:dns';
-
+import { randomInt } from 'crypto';
 
 interface IpResponse {
     ip: string;
