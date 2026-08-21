@@ -4,6 +4,9 @@ import { runClientTCP } from './TCP_Client.js';
 import { startServerUDP } from './UDP_server.js';
 import { runClientUDP } from './UDP_Client.js';
 
+import { startServerHTTP } from './HTTP_Server.js';
+import { runClientHTTP } from './HTTP_Client.js';
+
 
 async function TCP() {
     console.log('2.3 started');
@@ -30,3 +33,15 @@ async function UDP() {
 }
 // UDP server/client
 UDP().catch(console.error);
+
+async function HTTP() {
+    const HTTP_server = await startServerHTTP(3000);
+
+    await runClientHTTP('some text', 3000, '127.0.0.1');
+
+    HTTP_server.close(() => {
+        console.log('[Server] Stopped.');
+    });
+}
+// HTTP server/client
+HTTP().catch(console.error);

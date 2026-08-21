@@ -27,7 +27,7 @@ export function startServerUDP(port = 41234, host = '127.0.0.1'): Promise<dgram.
       const address = server.address();
       console.log(`[Server] Listening on ${address.address}:${address.port}`);
     });
-
+  
     const onStartupError = (err: Error) => {
       reject(err);
     };
