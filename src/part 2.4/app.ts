@@ -1,4 +1,10 @@
 import express, { type Express, type Request, type Response } from 'express';
+import cors from 'cors';
+import path from 'node:path';
+import session from 'express-session';
+import sessionFileStore from 'session-file-store';
+import { fileURLToPath } from 'url';
+import { error } from 'node:console';
 
 const app = express();
 
@@ -6,6 +12,13 @@ interface Idb {
     id: number,
     text: string,
     checked: boolean,
+}
+declare module 'express-session' {
+    interface SessionData {
+        user?: {
+            login: string;
+        };
+    }
 }
 
 const dataBase: Idb[] = [{
@@ -19,10 +32,28 @@ const dataBase: Idb[] = [{
     checked: false,
 }];
 
+const FileStore = sessionFileStore(session);
+app.use(session({
+    store: new FileStore({}),
+    secret: 'some-secret-key',
+    resave: false,
+    saveUninitialized: true,
+}));
+app.use(cors({
+    origin: 'https://jsfiddle.net',
+    optionsSuccessStatus: 200
+}));
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+app.use(express.static(path.join(__dirname, 'public')));
+
 app.use(express.json());
 
 app.route('/api/v1/items')
     .get((req, res) => {
+        if (!req.session.user) {
+            return res.status(403).json({ error: 'forbidden' });
+        }
         res.status(200).json({ items: dataBase });
     })
     .post((req, res) => {
@@ -66,6 +97,24 @@ app.route('/api/v1/items')
         res.status(200).json({ ok: true });
     });
 
+
+app.post('/api/v1/login', (req, res) => {
+    const { login, pass } = req.body;
+    req.session.user = { login };
+    res.status(200).json({ ok: true });
+});
+
+app.post('/api/v1/logout', (req, res) => {
+    req.session.destroy((err) => {
+        if (err) return res.status(500).json({error: 'some trouble, couldn`t log out'});
+        res.clearCookie('connect.sid');
+        res.status(200).json({ ok: true });
+    })
+});
+
+app.post('/api/v1/register', (req, res) => {
+
+});
 
 app.listen(3000, () => {
     console.log('Server is running on port 3000');

@@ -6,6 +6,8 @@
     "module": "nodenext",
     "rootDir": "./",
     "outDir": "./dist",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
 
     // Environment Settings
     // See also https://aka.ms/tsconfig/module
