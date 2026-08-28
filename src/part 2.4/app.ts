@@ -1,4 +1,4 @@
-import express, { type Express, type Request, type Response } from 'express';
+import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import path from 'node:path';
@@ -12,16 +12,8 @@ import { User } from './userSchema.js';
 const app = express();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-dotenv.config({ 
-  path: path.resolve(__dirname, './.env'),
-  override: true 
-});
-console.log('MONGO_URI зчитано:', process.env.MONGO_URI ? 'ТАК' : 'НІ');
-interface Idb {
-    id: number,
-    text: string,
-    checked: boolean,
-}
+dotenv.config({ path: path.resolve(__dirname, './.env') });
+
 declare module 'express-session' {
     interface SessionData {
         user: {
@@ -34,19 +26,8 @@ declare module 'express-session' {
 const MONGO_URI = process.env.MONGO_URI || '';
 
 mongoose.connect(MONGO_URI)
-  .then(() => console.log('✅ Successfully connected to MongoDB Atlas!'))
-  .catch((err) => console.error('MongoDB connection error:', err));
-
-const dataBase: Idb[] = [{
-    id: 22,
-    text: 'someText',
-    checked: true,
-},
-{
-    id: 12,
-    text: 'dvanadcyat',
-    checked: false,
-}];
+    .then(() => console.log('✅ Successfully connected to MongoDB Atlas!'))
+    .catch((err) => console.error('MongoDB connection error:', err));
 
 const FileStore = sessionFileStore(session);
 app.use(session({
@@ -57,6 +38,7 @@ app.use(session({
 }));
 app.use(cors({
     origin: 'https://jsfiddle.net',
+    credentials: true,
     optionsSuccessStatus: 200
 }));
 app.use(express.static(path.join(__dirname, 'public')));
@@ -64,14 +46,27 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
 app.route('/api/v1/items')
-    .get((req, res) => {
+    .get(async (req, res) => {
         if (!req.session.user) {
             return res.status(403).json({ error: 'forbidden' });
         }
-        res.status(200).json({ items: dataBase });
+        try {
+            const userId = req.session.user.id;
+            const userDB = await Todo.find({ userId }).lean();
+            const userItems = userDB.map(todo => ({
+                id: todo._id.toString(),
+                text: todo.text,
+                checked: todo.checked
+            }));
+            res.status(200).json({ items: userItems });
+        }
+        catch (error) {
+            return res.status(500).json({ error: 'Internal server error' });
+        }
     })
     .post(async (req, res) => {
         const { text } = req.body;
+        console.log(`${JSON.stringify(text)}`);
         const userId = req.session.user?.id;
         if (!userId) {
             return res.status(401).json({ error: 'Unauthorized' });
@@ -79,44 +74,57 @@ app.route('/api/v1/items')
         if (typeof text !== 'string' || !text.trim()) {
             return res.status(400).json({ error: `Field 'text' is required` });
         }
-        // const maxId = dataBase.length > 0 ? Math.max(...dataBase.map(item => item.id)) : 0;
-        // const id = maxId + 1;
-        // const obj: Idb = { id, text: text.trim(), checked: false };
-        // const response = `generated ID: ${id}, text: ${text}`;
-        const newTodo = await Todo.create({
-            text: text.trim(),
-            userId,
-        });
-        console.log('ID новоствореної тудушки:', newTodo);
-        // dataBase.push(obj);
-        res.status(201).json({ id: newTodo._id });
+        try {
+            const newTodo = await Todo.create({
+                text: text.trim(),
+                userId,
+            });
+            res.status(201).json({ id: newTodo._id });
+        }
+        catch (error) {
+            return res.status(500).json({ error: 'Internal server error' });
+        }
     })
-    .put((req, res) => {
-        const data: Idb = req.body;
-        const numericId = Number(data.id);
-        if (!data || typeof data.text !== 'string' || Number.isNaN(numericId) || typeof data.checked !== 'boolean') {
+    .put(async (req, res) => {
+        const data = req.body;
+        if (!req.session.user) {
+            return res.status(403).json({ error: 'forbidden' });
+        }
+        if (!data || typeof data.text !== 'string' || typeof data.checked !== 'boolean') {
             return res.status(400).json({ error: 'Data is not full' });
         }
-        const item = dataBase.find(elem => elem.id === numericId);
-        if (!item) {
-            return res.status(404).json({ error: 'Item not found' });
+        try {
+            const userId = req.session.user.id;
+            const item = await Todo.findOne({ _id: data.id, userId });
+            if (!item) {
+                return res.status(404).json({ error: 'Item not found' });
+            }
+            item.text = data.text.trim();
+            item.checked = data.checked;
+            await item.save();
+            return res.status(200).json({ ok: true });
+        } catch (error) {
+            return res.status(500).json({ error: 'Internal server error' });
         }
-        item.text = data.text.trim();
-        item.checked = data.checked;
-
-        return res.status(200).json({ ok: true });
     })
-    .delete((req, res) => {
+    .delete(async (req, res) => {
         const data = req.body;
-        if (!data || data.id === undefined || Number.isNaN(Number(data.id))) return res.status(400).json({ error: 'No id, or id is not a number' });
-        const index = dataBase.findIndex(elem => elem.id === Number(data.id));
-
-        if (index === -1) {
-            return res.status(404).json({ error: 'Item not found' });
+        if (!data || !data.id) {
+            return res.status(400).json({ error: 'No id' });
         }
-
-        dataBase.splice(index, 1);
-        res.status(200).json({ ok: true });
+        if (!req.session.user) {
+            return res.status(403).json({ error: 'forbidden' });
+        }
+        try {
+            const userId = req.session.user.id;
+            const result = await Todo.deleteOne({ _id: data.id, userId });
+            if (result.deletedCount === 0) {
+                return res.status(404).json({ error: 'Item not found' });
+            }
+            res.status(200).json({ ok: true });
+        } catch (error) {
+            return res.status(500).json({ error: 'Internal server error' });
+        }
     });
 
 
@@ -125,15 +133,19 @@ app.post('/api/v1/login', async (req, res) => {
     if (typeof login !== 'string' || typeof pass !== 'string') {
         return res.status(400).json({ error: 'Email and password are required' });
     }
-    const user = await User.findOne({ email: login.toLowerCase().trim() });
+    try {
+        const user = await User.findOne({ email: login.toLowerCase().trim() });
 
-    if (!user || pass.trim() !== user.password) return res.status(400).json({ error: `User not found or password is incorrect` });
+        if (!user || pass.trim() !== user.password) return res.status(400).json({ error: `User not found or password is incorrect` });
 
-    req.session.user = {
-        id: user._id.toString(),
-        email: login.trim(),
-    };
-    res.status(200).json({ ok: true });
+        req.session.user = {
+            id: user._id.toString(),
+            email: login.trim(),
+        };
+        res.status(200).json({ ok: true });
+    } catch (error) {
+        return res.status(500).json({ error: 'Internal server error' });
+    }
 });
 
 app.post('/api/v1/logout', (req, res) => {
@@ -145,13 +157,13 @@ app.post('/api/v1/logout', (req, res) => {
 });
 
 app.post('/api/v1/register', async (req, res) => {
+
+    const { login, pass } = req.body;
+
+    if (!login || !pass) {
+        return res.status(400).json({ error: 'Email and password are required' });
+    }
     try {
-        const { login, pass } = req.body;
-
-        if (!login || !pass) {
-            return res.status(400).json({ error: 'Email and password are required' });
-        }
-
         const newUser = await User.create({ email: login, password: pass });
 
         req.session.user = {
